@@ -9,7 +9,7 @@ float wind_sz = 50;
 uint64_t last_ack_received = 0;
 uint64_t min_RTT = 100; //initial estimate of min RTT is 100 ms
 float min_wind = 1;
-float max_wind = 40;
+float max_wind = 35;
 float interarrival_avg = 1; 
 /* Default constructor */
 Controller::Controller( const bool debug )
@@ -66,11 +66,11 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   }
   
   uint64_t iat = timestamp_ack_received - last_ack_received;//interarrival time
-  fprintf(stderr, "iat: %lu",iat);
+//  fprintf(stderr, "iat: %f",iat);
 	uint64_t diff_rtt = (uint64_t)std::abs(long(rtt_est - min_RTT));
-  //if (iat<1){
-    //iat = 1;
-  //}
+  if (iat<1){
+   iat = 1;
+  }
 
   double interarrival_ave_update = interarrival_avg * (1.0-d) + iat * (d);
   if (diff_rtt < 5) { //essentially, no difference between rtt_est and min_RTT, so queue is none
@@ -84,7 +84,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
       interarrival_avg = interarrival_ave_update;
     }
     wind_sz = b*float(min_RTT)/float(interarrival_avg) + min_queue_size;
-    fprintf(stderr, "Interarrival_avg: %f, wind_sz: %f \n",interarrival_avg,wind_sz);
+//    fprintf(stderr, "Interarrival_avg: %f, wind_sz: %f \n",interarrival_avg,wind_sz);
   }
     
   if ( debug_ ) {
