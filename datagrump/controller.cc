@@ -1,16 +1,16 @@
 #include <iostream>
-#include <unordered_map>
-#include <string>
+
 #include "controller.hh"
 #include "timestamp.hh"
 
 using namespace std;
-unordered_map <uint64_t, int> packets_sent;
-unordered_map <uint64_t, int> acks_received;
-float the_window_size = 50;
-float min_wind = 1.0;
-uint64_t last_seq_ack_seen = 0;
-uint64_t last_time_sent = 0;
+
+float wind_sz = 50;
+uint64_t last_ack_received = 0;
+uint64_t min_RTT = 100; //initial estimate of min RTT is 100 ms
+float min_wind = 1;
+float max_wind = 40;
+float interarrival_avg = 1; 
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( debug )
@@ -20,41 +20,14 @@ Controller::Controller( const bool debug )
 unsigned int Controller::window_size( void )
 {
   /* Default: fixed window size of 100 outstanding datagrams */
+  wind_sz = std::max(min_wind,std::min(wind_sz,max_wind));
   
-   //unsigned int send_time = timestamp();
- // if (timestamp()-sendtime > timeout_ms()){
-   //   the_window_size = the_window_size/2;
-   //   for ( auto it = packets_sent.begin(); it != packets_sent.end(); it++ ){
-   //  if (acks_received.find(it->first) != acks_received.end()){
-   //  unsigned int timediff = acks_received[it->first]-(it->second);
-     //    std::cout<<timediff<<std::endl;
-      //   if (timediff<timeout_ms()){
-        //     the_window_size = the_window_size+1;
-
-	//	}
-       //   else{
-        //     the_window_size =std::max(the_window_size/2,min_wind);
-     //   }
-            // packets_sent.erase(it->first);
-            // acks_received.erase(it->first);
-    // } else{
-     // if(timestamp_ms()-(it->second)>timeout_ms()){
-        //std::cout<<timestamp_ms()-(it->second)<<std::endl;
-        //the_window_size =std::max(the_window_size/2,min_wind);
-        //packets_sent.erase(it->first);
-     //  }
-     //  }
-      
-      if ( debug_ ) {
+  if ( debug_ ) {
     cerr << "At time " << timestamp_ms()
-	 << " window size is " << (unsigned int) the_window_size << endl;
-  } 
+	 << " window size is " << (unsigned int) wind_sz << endl;
+  }
 
-//}
- 
-//  }
- 
-  return (unsigned int) the_window_size;
+  return (unsigned int) wind_sz;
 }
 
 /* A datagram was sent */
@@ -69,9 +42,6 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
     cerr << "At time " << send_timestamp
 	 << " sent datagram " << sequence_number << endl;
   }
-  //last_time_sent = send_timestamp;
-  //add to table
- // packets_sent[sequence_number] = send_timestamp;
 }
 
 /* An ack was received */
@@ -85,15 +55,38 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
                                /* when the ack was received (by sender) */
 {
   /* Default: take no action */
+  float b = 0.5;
+  float d = 0.5;
+  float min_queue_size = 10;
+ 
+  uint64_t rtt_est = timestamp_ack_received - send_timestamp_acked; //new rtt estimate
   
-  if(sequence_number_acked>last_seq_ack_seen && timestamp_ack_received-send_timestamp_acked < timeout_ms()) { 
-      	the_window_size = the_window_size+float(1/the_window_size);
+  if (rtt_est < min_RTT){
+    min_RTT = rtt_est;
   }
-else{
-	the_window_size =std::max(the_window_size/float(2),min_wind);
-}
- last_seq_ack_seen = sequence_number_acked;
- //last_time_sent = send_timestamp_acked;
+  
+  uint64_t iat = timestamp_ack_received - last_ack_received;//interarrival time
+  fprintf(stderr, "iat: %lu",iat);
+	uint64_t diff_rtt = (uint64_t)std::abs(long(rtt_est - min_RTT));
+  //if (iat<1){
+    //iat = 1;
+  //}
+
+  double interarrival_ave_update = interarrival_avg * (1.0-d) + iat * (d);
+  if (diff_rtt < 5) { //essentially, no difference between rtt_est and min_RTT, so queue is none
+    fprintf(stderr, "NO QUEUE DETECTED.\n" );
+    wind_sz = wind_sz + (float)1.0/wind_sz;
+  } 
+  else{
+     if (iat > interarrival_avg) {
+      interarrival_avg = iat;
+    } else {
+      interarrival_avg = interarrival_ave_update;
+    }
+    wind_sz = b*float(min_RTT)/float(interarrival_avg) + min_queue_size;
+    fprintf(stderr, "Interarrival_avg: %f, wind_sz: %f \n",interarrival_avg,wind_sz);
+  }
+    
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
 	 << " received ack for datagram " << sequence_number_acked
@@ -101,6 +94,8 @@ else{
 	 << ", received @ time " << recv_timestamp_acked << " by receiver's clock)"
 	 << endl;
   }
+  
+  last_ack_received = timestamp_ack_received;
 }
 
 /* How long to wait (in milliseconds) if there are no acks
