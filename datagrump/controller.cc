@@ -10,7 +10,7 @@ uint64_t last_ack_received = 0;
 uint64_t min_RTT = 100; //initial estimate of min RTT is 100 ms
 float min_wind = 1;
 float max_wind = 35;
-float interarrival_avg = 1; 
+float interarrival_avg = 1;
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( debug )
@@ -21,7 +21,7 @@ unsigned int Controller::window_size( void )
 {
   /* Default: fixed window size of 100 outstanding datagrams */
   wind_sz = std::max(min_wind,std::min(wind_sz,max_wind));
-  
+
   if ( debug_ ) {
     cerr << "At time " << timestamp_ms()
 	 << " window size is " << (unsigned int) wind_sz << endl;
@@ -55,9 +55,9 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
                                /* when the ack was received (by sender) */
 {
   /* Default: take no action */
-  float b = 0.5;
-  float d = 0.5;
-  float min_queue_size = 10;
+  float b = 1.25;
+  float d = 0.25;
+  float min_queue_size = 5;
  
   uint64_t rtt_est = timestamp_ack_received - send_timestamp_acked; //new rtt estimate
   
@@ -74,7 +74,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 
   double interarrival_ave_update = interarrival_avg * (1.0-d) + iat * (d);
   if (diff_rtt < 5) { //essentially, no difference between rtt_est and min_RTT, so queue is none
-    fprintf(stderr, "NO QUEUE DETECTED.\n" );
+//    fprintf(stderr, "NO QUEUE DETECTED.\n" );
     wind_sz = wind_sz + (float)1.0/wind_sz;
   } 
   else{
